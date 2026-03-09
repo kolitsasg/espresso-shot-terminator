@@ -1,0 +1,166 @@
+esphome:
+  name: coffee-relay
+  friendly_name: Coffee Relay
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# Enable logging
+logger:
+  level: DEBUG
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: !secret api_encryption_key
+
+ota:
+  - platform: esphome
+    password: !secret ota_password
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Coffee-Relay Fallback Hotspot"
+    password: !secret fallback_ap_password
+
+captive_portal:
+
+esp32_ble_tracker:
+
+globals:
+  # false = not armed, true = armed and waiting for target
+  - id: shot_armed
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: shot_fired
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+ble_client:
+  - mac_address: !secret scale_mac_address
+    id: wmb_scale
+    on_connect:
+      then:
+        - logger.log: "✅ Connected to WeighMyBru scale!"
+    on_disconnect:
+      then:
+        - logger.log: "❌ Disconnected from WeighMyBru scale!"
+
+sensor:
+  - platform: ble_client
+    type: characteristic
+    ble_client_id: wmb_scale
+    # Standard UUIDs for the WeighMyBru/Decent scale interface
+    service_uuid: '6E400001-B5A3-F393-E0A9-E50E24DCCA9E'
+    characteristic_uuid: '6E400004-B5A3-F393-E0A9-E50E24DCCA9E'
+    name: "Live Shot Weight"
+    id: live_weight
+    notify: true
+    update_interval: never
+    unit_of_measurement: "g"
+    accuracy_decimals: 1
+    lambda: |-
+      if (x.size() < 4) return NAN;
+      union {
+        float f;
+        uint8_t bytes[4];
+      } w;
+      w.bytes[0] = x[0];
+      w.bytes[1] = x[1];
+      w.bytes[2] = x[2];
+      w.bytes[3] = x[3];
+      return w.f;
+    on_value:
+      then:
+        - lambda: |-
+            float weight = x;
+            
+            // Only act if armed and not already fired
+            if (id(shot_armed) && !id(shot_fired)) {
+              if (weight >= id(target_weight).state && weight > 2.0) {
+                id(shot_fired) = true;
+                id(shot_armed) = false;
+                ESP_LOGI("brew", "🎯 TARGET %.1fg HIT at %.1fg — STOPPING!", id(target_weight).state, weight);
+                id(brew_relay).turn_on();
+              }
+            }
+            
+            // Auto-reset when cup removed after a completed shot
+            if (id(shot_fired) && weight < 1.0) {
+              id(shot_fired) = false;
+              ESP_LOGI("brew", "🔄 Cup removed — ready for next shot");
+            }
+
+        - if:
+            condition:
+              lambda: 'return id(shot_fired) && id(brew_relay).state;'
+            then:
+              - delay: 300ms
+              - switch.turn_off: brew_relay
+
+switch:
+  - platform: gpio
+    pin: GPIO16
+    id: brew_relay
+    name: "Brew Button Relay"
+    icon: "mdi:coffee-maker"
+    restore_mode: ALWAYS_OFF
+
+number:
+  - platform: template
+    name: "Target Weight"
+    id: target_weight
+    min_value: 0
+    max_value: 100
+    step: 0.1
+    initial_value: 36.0
+    unit_of_measurement: "g"
+    optimistic: true
+
+button:
+  - platform: template
+    name: "Arm Shot Stop"
+    icon: "mdi:coffee-to-go"
+    on_press:
+      - lambda: |-
+          id(shot_armed) = true;
+          id(shot_fired) = false;
+      - logger.log: "☕ ARMED — will stop brew at target weight"
+
+  - platform: template
+    name: "Disarm"
+    icon: "mdi:cancel"
+    on_press:
+      - lambda: |-
+          id(shot_armed) = false;
+      - logger.log: "🚫 Disarmed — relay will NOT fire"
+
+  - platform: template
+    name: "Test Relay Click"
+    on_press:
+      - switch.turn_on: brew_relay
+      - delay: 500ms
+      - switch.turn_off: brew_relay
+
+text_sensor:
+  - platform: template
+    name: "Shot Status"
+    icon: "mdi:coffee"
+    lambda: |-
+      if (id(shot_fired)) return std::string("✅ Done");
+      if (id(shot_armed)) return std::string("⏳ Armed");
+      return std::string("💤 Idle");
+    update_interval: 1s
+
+binary_sensor:
+  - platform: template
+    name: "Shot Armed"
+    lambda: 'return id(shot_armed);'
