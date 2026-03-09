@@ -3,15 +3,15 @@
 An ESPHome-powered automation that automatically stops your espresso machine's pump when a target weight is reached, using real-time BLE scale data.
 
 ## 🚀 Features
-* **BLE Scale Integration:** Connects to WeighMyBru/Decent compatible scales.
+* **BLE Scale Integration:** Connects to WeighMyBru scale.
 * **Auto-Stop Logic:** Fires a relay to stop the pump exactly at your target weight.
 * **Smart Reset:** Automatically resets the "Armed" status when you remove the cup from the scale.
 * **Home Assistant Dashboard:** Control target weight, arm/disarm, and monitor status in real-time.
 
 ## 🛠 Hardware Required
-* **Microcontroller:** ESP32 (Required for BLE).
-* **Relay:** 5V or 12V Relay module (connected to the machine's brew button/solenoid).
-* **Scale:** WeighMyBru or any scale using the Decent BLE protocol.
+* **Microcontroller:** ESP32 (Required for BLE). https://www.aliexpress.com/item/1005005983735481.htm
+* **Relay:** Relay module (connected to the machine's brew button)
+* **Scale:** WeighMyBrew.
 
 ## 🔌 Wiring
 | Component | ESP32 Pin |
