@@ -1,36 +1,64 @@
-# ☕ Espresso Shot Terminator (ESPHome)
+☕ Espresso Shot Terminator (ESPHome)
+An ESPHome-powered automation that automatically stops your espresso machine's pump when a target weight is reached, using real-time BLE scale data from a WeighMyBru² scale.
+🚀 Features
 
-An ESPHome-powered automation that automatically stops your espresso machine's pump when a target weight is reached, using real-time BLE scale data.
+BLE Scale Integration: Connects wirelessly to the WeighMyBru² scale via Bluetooth Low Energy, reading real-time weight from the Bean Conqueror characteristic (6E400004).
+Auto-Stop on Weight: Fires a relay to stop the pump the moment your target weight is reached — no manual intervention needed during the shot.
+Always Armed: The system is armed automatically as soon as the BLE connection is established. No buttons to press, no app to open.
+Smart Reset: Automatically resets when you remove the cup from the scale (weight drops below 1g), ready for the next shot.
+Home Assistant Integration: Set target weight, monitor live shot weight, and test the relay from your HA dashboard.
+Drip-Through Compensation: Set your target weight slightly below your desired yield to account for water that drips through after the pump stops (typically 3–5g depending on your machine).
 
-## 🚀 Features
-* **BLE Scale Integration:** Connects to WeighMyBru scale.
-* **Auto-Stop Logic:** Fires a relay to stop the pump exactly at your target weight.
-* **Smart Reset:** Automatically resets the "Armed" status when you remove the cup from the scale.
-* **Home Assistant Dashboard:** Control target weight, arm/disarm, and monitor status in real-time.
+🛠 Hardware
+ComponentNotesESP32 Relay BoardESP32-WROOM-32E with onboard relay. AliExpress linkScaleWeighMyBru² — open-source smart espresso scale with BLE3D Printed CaseEnclosure for the ESP32 relay board: MakerWorld
+🔌 Wiring
+Relay to Brew Switch (Lelit Elizabeth)
+The Lelit Elizabeth's brew button has a 3-pin connector with three wires:
+Wire PositionFunctionEdge wire (white)GroundMiddle wireLED indicatorOther edge wireBrew signal (12.5V when active)
+Connect the relay output in parallel with the brew switch:
 
-## 🛠 Hardware Required
-* **Microcontroller:** ESP32 (Required for BLE). https://www.aliexpress.com/item/1005005983735481.htm
-* **Relay:** Relay module (connected to the machine's brew button)
-* **Scale:** WeighMyBrew.
+Relay COM → Brew signal wire (edge)
+Relay NO → Ground wire (white, other edge)
 
-## 🔌 Wiring
-| Component | ESP32 Pin |
-| :--- | :--- |
-| Relay Signal | GPIO16 |
-| Relay VCC | 5V / VIN |
-| Relay GND | GND |
+When the relay fires, it momentarily shorts the brew signal to ground — the same as pressing the brew button — which toggles the brew off.
+Powering the ESP32 Relay Board
+The ESP32 relay board is powered from mains voltage (AC 90–250V). Connect the board's L and N terminals to the power switch on the side of the Lelit Elizabeth, so the relay board turns on and off with the machine.
+ESP32 Pin Assignment
+FunctionGPIORelay controlGPIO16
+⚙️ Installation
 
-## ⚙️ Installation
+Prepare Secrets: Create a secrets.yaml file in your ESPHome directory:
 
-1.  **Prepare Secrets:** Create a `secrets.yaml` file in your ESPHome directory (use `secrets.yaml.example` as a template).
-2.  **Flash ESP32:** Use the ESPHome dashboard or command line to flash `coffee-relay.yaml` to your device.
-3.  **Add to Home Assistant:** The device will be auto-discovered. Add the entities to your dashboard for control.
+yaml   wifi_ssid: "your-wifi-name"
+   wifi_password: "your-wifi-password"
 
-## 📝 Usage
-1.  Set your **Target Weight** (e.g., 36.0g) in Home Assistant.
-2.  Press **Arm Shot Stop**.
-3.  Start your espresso shot.
-4.  The relay will trigger and stop the flow once the weight is met!
+Update MAC Address: In coffee-relay.yaml, replace the MAC address with your WeighMyBru scale's address:
 
----
-*Disclaimer: Modifying espresso machines involves high voltage. Proceed at your own risk.*
+yaml   ble_client:
+     - mac_address: XX:XX:XX:XX:XX:XX  # Your scale's MAC
+You can find this using the nRF Connect app on your phone, or from the ESPHome BLE tracker logs.
+
+Flash ESP32: Use the ESPHome dashboard or command line to flash coffee-relay.yaml to your device.
+Add to Home Assistant: The device will be auto-discovered. Add the entities to your dashboard.
+
+📝 Usage
+
+Turn on the machine — the ESP32 boots and auto-connects to the scale.
+Place your cup on the scale — the scale auto-tares on startup.
+Set your Target Weight in Home Assistant (e.g., 32g for a 36g yield with ~4g drip-through).
+Press the brew button on the machine — espresso starts flowing.
+The relay fires automatically when the target weight is reached, stopping the pump.
+Remove the cup — the system resets and is ready for the next shot.
+
+🔧 BLE Protocol Notes
+The WeighMyBru² scale exposes a Nordic UART Service (NUS) with several characteristics:
+UUIDFunction6E400001NUS Service6E400002GaggiMate weight data (custom binary protocol)6E400003Command channel (write commands, receive heartbeats)6E400004Bean Conqueror weight data (4-byte little-endian float) ← used by this project
+This project subscribes to 6E400004 notifications which deliver weight as a raw IEEE 754 float — the simplest format to parse.
+⚠️ Disclaimer
+Modifying espresso machines involves mains voltage (120/230V AC). Incorrect wiring can cause electric shock, fire, or equipment damage. If you are not comfortable working with mains voltage, have a qualified electrician perform the installation. Proceed at your own risk.
+🙏 Credits
+
+WeighMyBru² by 031 Dev Studios — the open-source scale that makes this possible
+ESPHome — the firmware framework
+Home Assistant — the smart home platform
+WeighMyBru Discord community for protocol guidance
